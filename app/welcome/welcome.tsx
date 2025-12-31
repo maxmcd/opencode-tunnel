@@ -12,11 +12,22 @@ export function Welcome() {
           <span className="h-3 w-3 rounded-full bg-green-400" />
         </div>
         <pre className="px-4 py-6 text-sm text-gray-800 font-mono whitespace-pre-wrap">
-          $ <span className="font-bold">bunx opencode-tunnel</span>
+          ${" "}
+          <span className="font-bold text-purple-600">
+            bunx opencode-tunnel
+          </span>
           {"\n"}Starting OpenCode process and connecting to tunnel...{"\n"}
           OpenCode tunnel is live at: https://k2humhpx.phew.network
         </pre>
       </div>
+      <p className="mt-4">
+        <a
+          className="underline text-sm text-purple-400"
+          href="https://github.com/maxmcd/opencode-tunnel"
+        >
+          Source
+        </a>
+      </p>
       <p className="mt-4 text-xs text-gray-400">
         (not an official OpenCode project)
       </p>
