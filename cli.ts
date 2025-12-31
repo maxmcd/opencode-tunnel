@@ -9,8 +9,9 @@
  */
 
 import { spawn } from "child_process";
-import { TunnelClient } from "./worker/lib/tunnel-client";
-import * as qrcode from "qrcode-terminal";
+import { TunnelClient } from "./worker/lib/tunnel-client.js";
+import qrcode from "qrcode-terminal";
+import WebSocket from "ws";
 
 interface Config {
   port: number;
@@ -98,7 +99,6 @@ class CLIManager {
           return fetch(localUrl, init);
         }) as any, // Cast to avoid type mismatch between Bun and Workers fetch
         createWebSocket: (url: string) => {
-          // Use ws package for Node.js WebSocket with custom headers
           return new WebSocket(url, {
             headers: {
               "User-Agent": "OpenCode-Tunnel-CLI",

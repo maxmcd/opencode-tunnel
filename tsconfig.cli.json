@@ -1,0 +1,14 @@
+{
+  "compilerOptions": {
+    "noEmitOnError": false,
+    "target": "ES2022",
+    "module": "ES2022",
+    "moduleResolution": "node",
+    "outDir": "dist",
+    "rootDir": ".",
+    "strict": false,
+    "skipLibCheck": true,
+    "esModuleInterop": true
+  },
+  "include": ["cli.ts", "worker/lib/tunnel-client.ts", "types/**/*.d.ts"]
+}

@@ -424,9 +424,11 @@ describe("WebSocket Proxy Protocol", () => {
               )
             );
 
-            const responseBody = JSON.stringify({ echoed: receivedRequestBody });
+            const responseBody = JSON.stringify({
+              echoed: receivedRequestBody,
+            });
             const responseBytes = new TextEncoder().encode(responseBody);
-            
+
             for (const chunk of chunkData(responseBytes)) {
               ws.send(JSON.stringify(createResponseChunk(message.id, chunk)));
             }
@@ -453,7 +455,9 @@ describe("WebSocket Proxy Protocol", () => {
                 if (done) break;
 
                 for (const chunk of chunkData(value)) {
-                  ws.send(JSON.stringify(createResponseChunk(message.id, chunk)));
+                  ws.send(
+                    JSON.stringify(createResponseChunk(message.id, chunk))
+                  );
                 }
               }
             }
@@ -477,17 +481,19 @@ describe("WebSocket Proxy Protocol", () => {
 
       expect(getRes.ok).toBe(true);
       const getText = await getRes.text();
-      
+
       // Verify response UTF-8 characters are preserved
-      expect(getText).toContain('\u201C'); // Left double quotation mark "
-      expect(getText).toContain('\u201D'); // Right double quotation mark "
-      expect(getText).toContain('\u2018'); // Left single quotation mark '
-      expect(getText).toContain('\u2019'); // Right single quotation mark '
-      expect(getText).toContain('\u2014'); // Em dash —
-      expect(getText).toContain('🎉'); // Emoji
-      expect(getText).toContain('中文'); // Chinese characters
-      expect(getText).toContain('café'); // Accented character
-      expect(getText).toBe(`Hello \u201Csmart quotes\u201D and \u2018single quotes\u2019 \u2014 emoji \u{1F389} 中文 café`);
+      expect(getText).toContain("\u201C"); // Left double quotation mark "
+      expect(getText).toContain("\u201D"); // Right double quotation mark "
+      expect(getText).toContain("\u2018"); // Left single quotation mark '
+      expect(getText).toContain("\u2019"); // Right single quotation mark '
+      expect(getText).toContain("\u2014"); // Em dash —
+      expect(getText).toContain("🎉"); // Emoji
+      expect(getText).toContain("中文"); // Chinese characters
+      expect(getText).toContain("café"); // Accented character
+      expect(getText).toBe(
+        `Hello \u201Csmart quotes\u201D and \u2018single quotes\u2019 \u2014 emoji \u{1F389} 中文 café`
+      );
 
       // Test 2: UTF-8 in POST request body (request body encoding)
       const requestBody = JSON.stringify({
@@ -511,7 +517,7 @@ describe("WebSocket Proxy Protocol", () => {
       );
 
       expect(postRes.ok).toBe(true);
-      const postData = await postRes.json();
+      const postData: any = await postRes.json();
 
       // Verify the request body was received correctly (full round-trip)
       expect(receivedRequestBody).toBe(requestBody);
@@ -521,7 +527,7 @@ describe("WebSocket Proxy Protocol", () => {
       expect(receivedRequestBody).toContain("中文"); // Chinese
       expect(receivedRequestBody).toContain("café"); // Accented
       expect(receivedRequestBody).toContain("\u2014"); // Em dash
-      
+
       // Verify the response echoed back the request correctly
       expect(postData.echoed).toBe(requestBody);
 

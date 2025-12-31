@@ -1,22 +1,18 @@
 /**
  * TunnelClient - Handles WebSocket connection and HTTP proxying
- * 
+ *
  * This class can be used both in the CLI and in tests by providing
  * a custom fetch function.
  */
 
-import type {
-  ProxyMessage,
-  ProxyRequest,
-} from "./protocol";
+import type { ProxyMessage, ProxyRequest } from "./protocol.js";
 import {
   createResponseStart,
   createResponseChunk,
   createResponseEnd,
   createResponseError,
-  decodeBase64,
   chunkData,
-} from "./protocol";
+} from "./protocol.js";
 
 interface PendingRequest {
   resolve: (response: Response) => void;
@@ -80,7 +76,7 @@ export class TunnelClient {
           this.log("WebSocket connection closed");
           this.ws = null;
           this.config.onDisconnect?.();
-          
+
           // Reject all pending requests
           const entries = Array.from(this.pendingRequests.entries());
           for (const [id, pending] of entries) {
@@ -152,7 +148,7 @@ export class TunnelClient {
       const response = await this.config.fetch(proxyReq.url, {
         method: proxyReq.method,
         headers: proxyReq.headers,
-        body: body,
+        body: body as any, // side-stepping a body type check issue
       });
 
       this.log(`<- ${response.status} ${proxyReq.url}`);
@@ -163,7 +159,9 @@ export class TunnelClient {
         headers[key] = value;
       });
 
-      this.sendMessage(createResponseStart(proxyReq.id, response.status, headers));
+      this.sendMessage(
+        createResponseStart(proxyReq.id, response.status, headers)
+      );
 
       // Stream response body in chunks
       if (response.body) {
