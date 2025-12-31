@@ -53,17 +53,16 @@ export class TunnelClient {
   async connect(): Promise<void> {
     if (this.isShuttingDown) return;
 
-    this.log("Connecting to tunnel...");
-
     return new Promise((resolve, reject) => {
       try {
+        let connected = false;
         // Use custom WebSocket factory if provided, otherwise use native WebSocket
         this.ws = this.config.createWebSocket
           ? this.config.createWebSocket(this.config.wsUrl)
           : new WebSocket(this.config.wsUrl);
 
         this.ws.onopen = () => {
-          this.log("Connected to tunnel");
+          connected = true;
           this.config.onConnect?.();
           resolve();
         };
@@ -86,7 +85,9 @@ export class TunnelClient {
         };
 
         this.ws.onerror = (error) => {
-          this.log(`WebSocket error: ${error}`);
+          if (connected) {
+            this.log(`WebSocket error: ${error}`);
+          }
           reject(error);
         };
       } catch (error) {

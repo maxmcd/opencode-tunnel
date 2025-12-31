@@ -14,7 +14,7 @@ import qrcode from "qrcode-terminal";
 import WebSocket from "ws";
 
 interface Config {
-  port: number;
+  port: string;
   tunnelUrl: string;
   workerUrl: string;
 }
@@ -31,54 +31,53 @@ class CLIManager {
   }
 
   async start() {
-    console.log("Starting OpenCode Tunnel Client");
-    console.log(`   Port: ${this.config.port}`);
-    console.log(`   Worker: ${this.config.workerUrl}`);
-    console.log("");
-    qrcode.generate(this.config.workerUrl, { small: true });
-
-    // Start opencode serve
-    await this.startOpencodeServer();
-
-    // Connect to tunnel
-    this.connect();
+    console.log("(this project is not associated with opencode)");
+    console.log("Starting OpenCode process and connecting to tunnel...");
 
     // Handle graceful shutdown
     process.on("SIGINT", () => this.shutdown());
     process.on("SIGTERM", () => this.shutdown());
+    // Connect to tunnel and start opencode serve
+    await Promise.all([this.startOpencodeServer(), this.connect()]);
+
+    console.log(``);
+    console.log(`OpenCode tunnel is live at: ${this.config.workerUrl}`);
+    qrcode.generate(this.config.workerUrl, { small: true });
   }
 
   private async startOpencodeServer() {
-    console.log("Starting opencode serve...");
+    return new Promise<void>((resolve, reject) => {
+      this.opcodeProcess = spawn(
+        "opencode",
+        ["serve", "--port", this.config.port.toString()],
+        { stdio: "pipe" }
+      );
+      this.opcodeProcess.stdout?.on("data", (data: Buffer) => {
+        const logString = data.toString();
+        if (logString.includes("opencode server listening")) resolve();
+        console.log(`[opencode] ${logString.trim()}`);
+      });
 
-    this.opcodeProcess = spawn(
-      "opencode",
-      ["serve", "--port", this.config.port.toString()],
-      {
-        stdio: "pipe",
-      }
-    );
+      this.opcodeProcess.stderr?.on("data", (data: Buffer) =>
+        console.error(`[opencode] ${data.toString().trim()}`)
+      );
 
-    this.opcodeProcess.stdout?.on("data", (data: Buffer) => {
-      console.log(`   [opencode] ${data.toString().trim()}`);
+      this.opcodeProcess.on("error", (error: Error) => {
+        reject(
+          new Error(`Failed to start opencode server: ${error.message}`, {
+            cause: error,
+          })
+        );
+      });
+
+      this.opcodeProcess.on("close", (code: number) => {
+        console.log(`   [opencode] Process exited with code ${code}`);
+        if (!this.isShuttingDown) {
+          console.error("OpenCode server stopped unexpectedly");
+          process.exit(1);
+        }
+      });
     });
-
-    this.opcodeProcess.stderr?.on("data", (data: Buffer) => {
-      console.error(`   [opencode] ${data.toString().trim()}`);
-    });
-
-    this.opcodeProcess.on("close", (code: number) => {
-      console.log(`   [opencode] Process exited with code ${code}`);
-      if (!this.isShuttingDown) {
-        console.error("WARNING: OpenCode server stopped unexpectedly");
-        process.exit(1);
-      }
-    });
-
-    // Wait a bit for server to start
-    await new Promise((resolve) => setTimeout(resolve, 2000));
-    console.log("OpenCode server started");
-    console.log("");
   }
 
   private async connect() {
@@ -100,14 +99,8 @@ class CLIManager {
         }) as any, // Cast to avoid type mismatch between Bun and Workers fetch
         createWebSocket: (url: string) => {
           return new WebSocket(url, {
-            headers: {
-              "User-Agent": "OpenCode-Tunnel-CLI",
-            },
+            headers: { "User-Agent": "OpenCode-Tunnel-CLI" },
           }) as any;
-        },
-        onConnect: () => {
-          console.log(` Your tunnel is live at: ${this.config.workerUrl}`);
-          console.log("");
         },
         onDisconnect: () => {
           this.tunnelClient = null;
@@ -124,8 +117,12 @@ class CLIManager {
       });
 
       await this.tunnelClient.connect();
-    } catch (error) {
-      console.error(" Failed to connect:", error);
+      console.log("Connected to tunnel");
+    } catch (error: unknown) {
+      console.error(
+        " Failed to connect:",
+        error instanceof ErrorEvent ? error.message : error
+      );
       this.tunnelClient = null;
 
       // Schedule reconnect if not already scheduled
@@ -167,8 +164,8 @@ class CLIManager {
 async function main() {
   const args = process.argv.slice(2);
 
-  let port = 8080;
-  let workerHost = "opencode.website";
+  let port = "8080";
+  let workerHost = "phew.network";
   let local = false;
 
   for (let i = 0; i < args.length; i++) {
@@ -177,8 +174,6 @@ async function main() {
       workerHost = "localhost:5173";
     }
   }
-
-  console.log("Creating new tunnel...");
 
   const response = await fetch(
     `${local ? "http" : "https"}://${workerHost}/api/tunnels/create`,
@@ -197,10 +192,6 @@ async function main() {
     subdomain: string;
     url: string;
   };
-
-  console.log("Tunnel created!");
-  console.log(`   Subdomain: ${tunnel.subdomain}`);
-  console.log("");
 
   // Construct public URL
   const hostParts = workerHost.split(":");

@@ -37,16 +37,16 @@
   },
   "routes": [
     {
-      "pattern": "opencode.website/*",
-      "zone_name": "opencode.website",
+      "pattern": "phew.network/*",
+      "zone_name": "phew.network",
     },
     {
-      "pattern": "*.opencode.website/*",
-      "zone_name": "opencode.website",
+      "pattern": "*.phew.network/*",
+      "zone_name": "phew.network",
     },
   ],
   "vars": {
-    "TUNNEL_DOMAIN": "opencode.website",
+    "TUNNEL_DOMAIN": "phew.network",
     "TEST_MIGRATIONS": [],
   },
   "migrations": [

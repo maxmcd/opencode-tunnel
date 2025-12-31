@@ -67,7 +67,6 @@ export class TunnelDO extends DurableObject<Env> {
 
     // Handle WebSocket error
     server.addEventListener("error", (event) => {
-      console.error("WebSocket error:", event);
       this.clientWs = null;
     });
 
