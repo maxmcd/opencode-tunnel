@@ -137,10 +137,15 @@ export class TunnelClient {
     this.log(`-> ${proxyReq.method} ${proxyReq.url}`);
 
     try {
-      // Decode body if present
-      let body: string | undefined;
+      // Decode body if present - must convert to Uint8Array to preserve binary data
+      let body: Uint8Array | undefined;
       if (proxyReq.body) {
-        body = atob(proxyReq.body);
+        const binaryString = atob(proxyReq.body);
+        const bytes = new Uint8Array(binaryString.length);
+        for (let i = 0; i < binaryString.length; i++) {
+          bytes[i] = binaryString.charCodeAt(i);
+        }
+        body = bytes;
       }
 
       // Make request using provided fetch function

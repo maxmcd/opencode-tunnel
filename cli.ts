@@ -10,6 +10,7 @@
 
 import { spawn } from "child_process";
 import { TunnelClient } from "./worker/lib/tunnel-client";
+import * as qrcode from "qrcode-terminal";
 
 interface Config {
   port: number;
@@ -33,6 +34,7 @@ class CLIManager {
     console.log(`   Port: ${this.config.port}`);
     console.log(`   Worker: ${this.config.workerUrl}`);
     console.log("");
+    qrcode.generate(this.config.workerUrl, { small: true });
 
     // Start opencode serve
     await this.startOpencodeServer();

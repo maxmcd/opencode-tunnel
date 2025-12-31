@@ -104,6 +104,16 @@ describe("WebSocket Proxy Protocol", () => {
             headers: { "Content-Type": "text/plain" },
           })
         );
+      } else if (url === "/utf8") {
+        // Test various UTF-8 characters including smart quotes, emoji, and international characters
+        // Use Unicode escapes to ensure actual smart quotes are preserved
+        const utf8Text = `Hello \u201Csmart quotes\u201D and \u2018single quotes\u2019 \u2014 emoji \u{1F389} 中文 café`;
+        return Promise.resolve(
+          new Response(utf8Text, {
+            status: 200,
+            headers: { "Content-Type": "text/plain; charset=utf-8" },
+          })
+        );
       }
       return Promise.resolve(new Response("Not Found", { status: 404 }));
     };
@@ -125,15 +135,14 @@ describe("WebSocket Proxy Protocol", () => {
         subdomain: string;
         url: string;
       };
-      expect(tunnel.id).toBeDefined();
       expect(tunnel.subdomain).toBeDefined();
 
       // Step 2: Connect CLI WebSocket to Durable Object
-      const wsUrl = `http://localhost:5173/tunnel/${tunnel.id}/connect`;
+      const wsUrl = `http://localhost:5173/tunnel/${tunnel.subdomain}/connect`;
       const wsRes = await SELF.fetch(wsUrl, {
-        headers: { 
+        headers: {
           Upgrade: "websocket",
-          "User-Agent": "OpenCode-Tunnel-CLI" 
+          "User-Agent": "OpenCode-Tunnel-CLI",
         },
       });
 
@@ -254,17 +263,16 @@ describe("WebSocket Proxy Protocol", () => {
       );
 
       const tunnel = (await createRes.json()) as {
-        id: string;
         subdomain: string;
       };
 
       // Connect WebSocket
       const wsRes = await SELF.fetch(
-        `http://localhost:5173/tunnel/${tunnel.id}/connect`,
+        `http://localhost:5173/tunnel/${tunnel.subdomain}/connect`,
         {
-          headers: { 
+          headers: {
             Upgrade: "websocket",
-            "User-Agent": "OpenCode-Tunnel-CLI"
+            "User-Agent": "OpenCode-Tunnel-CLI",
           },
         }
       );
@@ -354,6 +362,170 @@ describe("WebSocket Proxy Protocol", () => {
       expect(proxyRes.status).toBe(503);
       const errorText = await proxyRes.text();
       expect(errorText).toContain("Tunnel client not connected");
+    });
+
+    it("should preserve UTF-8 encoding in both request and response bodies", async () => {
+      // Create tunnel
+      const createRes = await SELF.fetch(
+        "http://localhost:5173/api/tunnels/create",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({}),
+        }
+      );
+
+      const tunnel = (await createRes.json()) as {
+        id: string;
+        subdomain: string;
+      };
+
+      // Connect WebSocket
+      const wsRes = await SELF.fetch(
+        `http://localhost:5173/tunnel/${tunnel.subdomain}/connect`,
+        {
+          headers: {
+            Upgrade: "websocket",
+            "User-Agent": "OpenCode-Tunnel-CLI",
+          },
+        }
+      );
+
+      const ws = wsRes.webSocket!;
+      ws.accept();
+
+      // Track what request body the mock server receives
+      let receivedRequestBody: string | null = null;
+
+      // Set up CLI simulator that echoes request body and serves UTF-8 content
+      ws.addEventListener("message", async (event) => {
+        const message = JSON.parse(event.data as string);
+
+        if (message.type === "request") {
+          // Capture the request body (simulate what OpenCode would receive)
+          if (message.body) {
+            const binaryString = atob(message.body);
+            const bytes = new Uint8Array(binaryString.length);
+            for (let i = 0; i < binaryString.length; i++) {
+              bytes[i] = binaryString.charCodeAt(i);
+            }
+            const decoder = new TextDecoder();
+            receivedRequestBody = decoder.decode(bytes);
+          }
+
+          // Route requests to different handlers
+          if (message.url === "/echo") {
+            // Echo back the request body in response
+            ws.send(
+              JSON.stringify(
+                createResponseStart(message.id, 200, {
+                  "Content-Type": "application/json; charset=utf-8",
+                })
+              )
+            );
+
+            const responseBody = JSON.stringify({ echoed: receivedRequestBody });
+            const responseBytes = new TextEncoder().encode(responseBody);
+            
+            for (const chunk of chunkData(responseBytes)) {
+              ws.send(JSON.stringify(createResponseChunk(message.id, chunk)));
+            }
+
+            ws.send(JSON.stringify(createResponseEnd(message.id)));
+          } else if (message.url === "/utf8") {
+            // Serve UTF-8 content (from mockFetch)
+            const response = await mockFetch(message.url);
+            const resHeaders: Record<string, string> = {};
+            response.headers.forEach((value, key) => {
+              resHeaders[key] = value;
+            });
+
+            ws.send(
+              JSON.stringify(
+                createResponseStart(message.id, response.status, resHeaders)
+              )
+            );
+
+            if (response.body) {
+              const reader = response.body.getReader();
+              while (true) {
+                const { done, value } = await reader.read();
+                if (done) break;
+
+                for (const chunk of chunkData(value)) {
+                  ws.send(JSON.stringify(createResponseChunk(message.id, chunk)));
+                }
+              }
+            }
+
+            ws.send(JSON.stringify(createResponseEnd(message.id)));
+          }
+        }
+      });
+
+      await new Promise((resolve) => setTimeout(resolve, 100));
+
+      // Test 1: UTF-8 in GET response (response body encoding)
+      const getRes = await SELF.fetch(
+        `http://${tunnel.subdomain}.localhost:5173/utf8`,
+        {
+          headers: {
+            "X-Tunnel-Secret": "test-secret",
+          },
+        }
+      );
+
+      expect(getRes.ok).toBe(true);
+      const getText = await getRes.text();
+      
+      // Verify response UTF-8 characters are preserved
+      expect(getText).toContain('\u201C'); // Left double quotation mark "
+      expect(getText).toContain('\u201D'); // Right double quotation mark "
+      expect(getText).toContain('\u2018'); // Left single quotation mark '
+      expect(getText).toContain('\u2019'); // Right single quotation mark '
+      expect(getText).toContain('\u2014'); // Em dash —
+      expect(getText).toContain('🎉'); // Emoji
+      expect(getText).toContain('中文'); // Chinese characters
+      expect(getText).toContain('café'); // Accented character
+      expect(getText).toBe(`Hello \u201Csmart quotes\u201D and \u2018single quotes\u2019 \u2014 emoji \u{1F389} 中文 café`);
+
+      // Test 2: UTF-8 in POST request body (request body encoding)
+      const requestBody = JSON.stringify({
+        message: "Hello \u201Csmart quotes\u201D",
+        emoji: "\u{1F389}",
+        chinese: "中文",
+        accented: "café",
+        special: "\u2014", // em dash
+      });
+
+      const postRes = await SELF.fetch(
+        `http://${tunnel.subdomain}.localhost:5173/echo`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "X-Tunnel-Secret": "test-secret",
+          },
+          body: requestBody,
+        }
+      );
+
+      expect(postRes.ok).toBe(true);
+      const postData = await postRes.json();
+
+      // Verify the request body was received correctly (full round-trip)
+      expect(receivedRequestBody).toBe(requestBody);
+      expect(receivedRequestBody).toContain("\u201C"); // Smart quote
+      expect(receivedRequestBody).toContain("\u201D"); // Smart quote
+      expect(receivedRequestBody).toContain("\u{1F389}"); // Emoji
+      expect(receivedRequestBody).toContain("中文"); // Chinese
+      expect(receivedRequestBody).toContain("café"); // Accented
+      expect(receivedRequestBody).toContain("\u2014"); // Em dash
+      
+      // Verify the response echoed back the request correctly
+      expect(postData.echoed).toBe(requestBody);
+
+      ws.close();
     });
   });
 });

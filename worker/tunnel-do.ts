@@ -20,20 +20,18 @@ export class TunnelDO extends DurableObject<Env> {
   }
 
   async fetch(request: Request): Promise<Response> {
-    const url = new URL(request.url);
-
     // Handle WebSocket upgrade from CLI client
     if (
       request.headers.get("User-Agent") === "OpenCode-Tunnel-CLI" &&
       request.headers.get("Upgrade") === "websocket"
     ) {
-      return this.handleWebSocketConnect(request);
+      return this.handleWebSocketConnect();
     }
 
     return this.handleProxyRequest(request);
   }
 
-  private handleWebSocketConnect(request: Request): Response {
+  private handleWebSocketConnect(): Response {
     const pair = new WebSocketPair();
     const [client, server] = Object.values(pair);
 
@@ -198,6 +196,21 @@ export class TunnelDO extends DurableObject<Env> {
       if (pending) {
         pending.status = message.status;
         pending.headers = message.headers;
+
+        // Check if this is a CSS file - we'll inject overrides at the end
+        const contentType =
+          message.headers["content-type"] ||
+          message.headers["Content-Type"] ||
+          "";
+        const isCss =
+          contentType.includes("text/css") || contentType.includes("css");
+
+        if (isCss) {
+          console.log("Detected CSS file - will inject overrides");
+          // Mark this request for CSS injection
+          (pending as any).isCSS = true;
+        }
+
         // Resolve headers promise so Response can be created with status/headers
         pending.resolve({ status: message.status, headers: message.headers });
       }
@@ -225,6 +238,46 @@ export class TunnelDO extends DurableObject<Env> {
       const pending = this.pendingRequests.get(message.id);
       if (pending) {
         try {
+          // If this was a CSS file, inject our overrides before closing
+          if ((pending as any).isCSS) {
+            const cssOverride = `
+/* === OPENCODE TUNNEL CSS OVERRIDES === */
+div.absolute[class*="bottom-"][class*="flex"][class*="z-50"][class*="justify-center"] {
+  position: sticky !important;
+  bottom: 0 !important;
+}
+
+#root {
+  height: 100dvh;
+}
+
+[data-component="user-message"] {
+  min-width: 0;
+  max-width: 100%;
+}
+
+[data-component="user-message"] [data-slot="user-message-text"] {
+    overflow-wrap: break-word;
+    word-break: break-word;
+}
+
+[data-component="prompt-input"] {
+    font-size: 16px;
+}
+
+[data-component=tabs] {
+    padding-bottom: 0 !important;
+}
+
+[data-component=input] [data-slot=input-input] {
+    font-size: 16px !important;
+}
+`;
+            const cssBytes = new TextEncoder().encode(cssOverride);
+            pending.controller.enqueue(cssBytes);
+            console.log("Injected CSS overrides into stylesheet");
+          }
+
           pending.controller.close();
         } catch (error) {
           console.error("Error closing stream:", error);
